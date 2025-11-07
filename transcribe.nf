@@ -56,8 +56,8 @@ process prepare_initial_data_dir {
       path 'init_datadir', emit: init_datadir, optional: true
 
     shell:
-    '''    
-    if [ $(wc -l < !{show_rttm}) -gt 1 ]; then
+    '''
+    if [ $(wc -l < !{show_rttm}) -ge 1 ]; then
         . !{projectDir}/bin/prepare_process.sh
         mkdir init_datadir
         echo audio audio A > init_datadir/reco2file_and_channel
