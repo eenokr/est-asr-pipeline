@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 import sys
 import argparse
@@ -31,5 +31,4 @@ if __name__ == '__main__':
 
     if word != "<eps>":
       print("%s 1 %0.2f %0.2f %s" % (ss[0], start_frame * args.frame_shift, num_frames * args.frame_shift, word))
-
 

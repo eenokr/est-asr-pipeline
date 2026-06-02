@@ -19,3 +19,5 @@ bin/spkid_system
 nextflow
 demo.opus
 auto_transcribe
+__pycache__/
+*.py[cod]

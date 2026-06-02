@@ -49,6 +49,11 @@ Run:
 
     nextflow run transcribe.nf --in /path/to/some_audiofile.mp3
 
+On machines with limited RAM, run the pipeline serially with one CPU and a Docker
+memory cap:
+
+    nextflow run transcribe.nf -profile lowmem --in /path/to/some_audiofile.mp3
+
 If you didn't pull the Docker image before, then the first invocation might take some time, because the required Docker image
 containing all the needed models and libraries is automatically pulled from the remote registry.
 

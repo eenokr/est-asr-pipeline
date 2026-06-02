@@ -2,22 +2,6 @@
 
 nextflow.enable.dsl=2
 
-def env = System.getenv()
-params.out_dir = ""
-params.do_speaker_id = true
-params.do_punctuation = true
-params.do_language_id = true
-audio_file = file(params.in)
-
-out_dir = ""
-if (params.out_dir == "") {
-  out_dir = "results/${audio_file.baseName}/"
-}
-else if (params.out_dir[-1] != "/") {
-  out_dir = params.out_dir + "/"
-}
-else out_dir = params.out_dir
-
 process to_wav {
     memory '500MB'
     cpus 2
@@ -59,7 +43,7 @@ process prepare_initial_data_dir {
     path audio
 
     output:
-    path 'init_datadir', emit: init_datadir optional true
+    path 'init_datadir', optional: true, emit: init_datadir
 
     shell:
     '''
@@ -93,7 +77,7 @@ process language_id {
     path audio    
     
     output:
-    path 'datadir', emit: datadir optional true
+    path 'datadir', optional: true, emit: datadir
     
     shell:
     if ( params.do_language_id )
@@ -344,11 +328,11 @@ process punctuation {
         cd !{params.rootdir}/punctuator-data/est_punct2
         TEMP_FILE1=$(mktemp); 
         TEMP_FILE2=$(mktemp);
-        cat $WORK_DIR/!{unpunctuated_json} > TEMP_FILE1 
-        python2 punctuator_pad_emb_json.py Model_stage2p_final_563750_h256_lr0.02.pcl TEMP_FILE1 TEMP_FILE2  
-        cat TEMP_FILE2 > $WORK_DIR/punctuated.json
-        rm TEMP_FILE1 TEMP_FILE2 
-        cd $WORK_DIR
+        trap 'rm -f "$TEMP_FILE1" "$TEMP_FILE2"' EXIT
+        cp "$WORK_DIR/!{unpunctuated_json}" "$TEMP_FILE1"
+        python2 punctuator_pad_emb_json.py Model_stage2p_final_563750_h256_lr0.02.pcl "$TEMP_FILE1" "$TEMP_FILE2"
+        cp "$TEMP_FILE2" "$WORK_DIR/punctuated.json"
+        cd "$WORK_DIR"
         '''
       else
         '''
@@ -359,7 +343,7 @@ process punctuation {
 process final_output {
     memory '500MB'
     
-    publishDir "${out_dir}", mode: 'copy', overwrite: true
+    publishDir { params.out_dir ? (params.out_dir.endsWith("/") ? params.out_dir : "${params.out_dir}/") : "results/${file(params.in).baseName}/" }, mode: 'copy', overwrite: true
 
     input:
     path with_compounds_ctm
@@ -373,28 +357,27 @@ process final_output {
     path "result.with-compounds.ctm", emit: result_with_compounds_ctm
     path "result.txt", emit: result_txt
 
-    script:
-      json = punctuated_json
-      """
-      normalize_json.py words2numbers.py $json > result.json
+    shell:
+      '''
+      normalize_json.py words2numbers.py !{punctuated_json} > result.json
 
-      cat $with_compounds_ctm | unsegment-ctm.py | LC_ALL=C sort -k 1,1 -k 3,3n -k 4,4n > with-compounds.synced.ctm
+      cat !{with_compounds_ctm} | unsegment-ctm.py | LC_ALL=C sort -k 1,1 -k 3,3n -k 4,4n > with-compounds.synced.ctm
       cat with-compounds.synced.ctm | grep -v \"<\" > result.ctm
       cat result.ctm | ctm2with-sil-ctm.py > result.with-compounds.ctm
-      json2trs.py --fid trs $json > result.trs
+      json2trs.py --fid trs !{punctuated_json} > result.trs
       json2srt.py result.json > result.srt
       json2text.py result.json > result.txt
-      """
+      '''
 }
 
 process empty_output {
-    publishDir "${out_dir}", mode: 'copy', overwrite: true
+    publishDir { params.out_dir ? (params.out_dir.endsWith("/") ? params.out_dir : "${params.out_dir}/") : "results/${file(params.in).baseName}/" }, mode: 'copy', overwrite: true
 
     input:
     val a
     val b
-    when:
-    a == 'EMPTY' || b == 'EMPTY' 
+    path empty_json
+    path empty_ctm
 
     output:
     path "result.json", emit: empty_result_json
@@ -404,20 +387,23 @@ process empty_output {
     path "result.with-compounds.ctm", emit: empty_result_with_compounds_ctm
     path "result.txt", emit: empty_result_txt
 
-    script:
-      json = file("assets/empty.json")
-      with_compounds_ctm = file("assets/empty.ctm")
-      """
-      cp $json result.json
-      json2trs.py $json > result.trs      
-      touch result.srt result.ctm result.with-compounds.ctm
+    when:
+    a == 'EMPTY' || b == 'EMPTY'
+
+    shell:
+      '''
+      cp !{empty_json} result.json
+      json2trs.py !{empty_json} > result.trs
+      cp !{empty_ctm} result.ctm
+      cp !{empty_ctm} result.with-compounds.ctm
+      touch result.srt
       json2text.py result.json > result.txt
-      """
+      '''
 }
 
 workflow {
     // Convert audio to WAV format
-    to_wav(audio_file)
+    to_wav(file(params.in))
     
     // Perform diarization
     diarization(to_wav.out.audio)
@@ -453,6 +439,10 @@ workflow {
     final_output(lattice2ctm.out.with_compounds_ctm, punctuation.out.punctuated_json)
     
     // Handle empty output case
-    empty_output(language_id.out.datadir.ifEmpty{ 'EMPTY' }, prepare_initial_data_dir.out.init_datadir.ifEmpty{ 'EMPTY' })
+    empty_output(
+        language_id.out.datadir.ifEmpty{ 'EMPTY' },
+        prepare_initial_data_dir.out.init_datadir.ifEmpty{ 'EMPTY' },
+        file("$projectDir/assets/empty.json"),
+        file("$projectDir/assets/empty.ctm")
+    )
 }
-
