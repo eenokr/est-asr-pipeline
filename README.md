@@ -1,122 +1,99 @@
 # ASR pipeline for Estonian speech recognition
 
-This project uses the Nextflow workflow engine to transcribe Estonian speech recordings to text.
+This repository contains two separate Nextflow pipelines:
 
-Nextflow offers great support for container technologies like Docker and different cluster and cloud environments as well as Kubernetes.
+- `transcribe.nf` is the default CPU-only Kaldi pipeline.
+- `transcribe-whisper-gpu.nf` is a Whisper/CUDA pipeline and requires an NVIDIA GPU.
+
+The pipelines intentionally use separate entrypoints, configs, and Dockerfiles because their runtime dependencies are different.
 
 ## Installation
 
-The project uses Nextflow which depends mainly on Java. Both should be installed locally. Nextflow 23.0.0 or later is required as this project uses DSL v2.
-
-The pre-built model, scripts and Kaldi tookit is consumed via Docker and so Docker also needs to be installed.
-
-This configuration has only been used on Linux. Because of Docker use other OS-s could be possible but because of configuration tricks used in the nextflow.config files, Dockerizing this project might be easiest.
-
-Install Java (requires Java 8 or later, see [official documentation](https://www.nextflow.io/docs/latest/install.html) for more instructions). For example, using SDKMAN:
-
-    curl -s https://get.sdkman.io | bash
-
-Reopen terminal to make the `sdk` program available on the terminal. Then:
-
-    sdk install java 17.0.10-tem
-
-Confirm that Java is installed correctly:
-
-    java -version
-
-Install Nextflow locally 
+Install Java and Nextflow. Nextflow 23.0.0 or later is required.
 
     wget -qO- https://get.nextflow.io | bash
-
-Make it excectuable:
-
     chmod +x nextflow
-
-Move Nextflow into an executable path. For example:
-
     mkdir -p $HOME/.local/bin/
     mv nextflow $HOME/.local/bin/
 
-Pull the required Docker image, containing models and libraries (recommended):
+Docker is recommended for both pipelines.
+
+## CPU/Kaldi Pipeline
+
+Pull the CPU image:
 
     docker pull alumae/est-asr-pipeline:0.1.4
 
-## Usage
+Run the default CPU pipeline:
 
-### Using a prebuilt Docker image
+    nextflow run transcribe.nf --in /path/to/audio.mp3
 
-Run:
+On machines with limited RAM, run serially with one CPU and a Docker memory cap:
 
-    nextflow run transcribe.nf --in /path/to/some_audiofile.mp3
+    nextflow run transcribe.nf -profile lowmem --in /path/to/audio.mp3
 
-On machines with limited RAM, run the pipeline serially with one CPU and a Docker
-memory cap:
+By default, results are written to `results/<audio-basename>/`:
 
-    nextflow run transcribe.nf -profile lowmem --in /path/to/some_audiofile.mp3
+    result.ctm  result.json  result.srt  result.trs  result.with-compounds.ctm  result.txt
 
-If you didn't pull the Docker image before, then the first invocation might take some time, because the required Docker image
-containing all the needed models and libraries is automatically pulled from the remote registry.
+The CPU pipeline writes plain transcript text to `result.txt`.
 
-A successful invocation will result with something like this:
+## Whisper/CUDA Pipeline
 
-    N E X T F L O W  ~  version 23.0.0
-    Launching `transcribe.nf` [backstabbing_baekeland] - revision: 7ee707faa8
-    executor >  local (12)
-    [ae/4b81cd] process > to_wav                   [100%] 1 of 1 ✔
-    [27/370fbd] process > diarization              [100%] 1 of 1 ✔
-    [ec/c58cee] process > prepare_initial_data_dir [100%] 1 of 1 ✔
-    [c6/299141] process > language_id              [100%] 1 of 1 ✔
-    [d8/9fcbc7] process > mfcc                     [100%] 1 of 1 ✔
-    [85/a6589b] process > speaker_id               [100%] 1 of 1 ✔
-    [09/f7d366] process > one_pass_decoding        [100%] 1 of 1 ✔
-    [0e/fd2533] process > rnnlm_rescoring          [100%] 1 of 1 ✔
-    [c0/461429] process > lattice2ctm              [100%] 1 of 1 ✔
-    [b4/04eeee] process > to_json                  [100%] 1 of 1 ✔
-    [37/3d7f31] process > punctuation              [100%] 1 of 1 ✔
-    [86/90a123] process > output                   [100%] 1 of 1 ✔
-    [d3/23d672] process > empty_output             -
-    Completed at: 14-apr-2022 10:55:48
-    Duration    : 3m 31s
-    CPU hours   : 0.1
-    Succeeded   : 12
+The Whisper pipeline requires an NVIDIA GPU, CUDA-compatible drivers, and the NVIDIA container runtime when using Docker.
 
-The transcription result in different formats is put to the directory `results/some_audiofile`
-(where `some_audiofile` corresponds to the "basename" of your input file):
+Pull the GPU image:
 
-    $ ls results/some_audiofile/
-    result.ctm  result.json  result.srt  result.trs  result.with-compounds.ctm
+    docker pull europe-north1-docker.pkg.dev/speech2text-218910/repo/est-asr-pipeline:1.1b
 
-### Running on cluster
+Run the Whisper pipeline:
 
-Requires change og config. It is configured in the `whisper-gpu` branch and it is recommended to use that branch anyways as the model is better (but requires an NVidia GPU).
+    nextflow -C nextflow.whisper-gpu.config run transcribe-whisper-gpu.nf -profile docker --in /path/to/audio.mp3
 
-### Running without Docker
+For SGE:
 
-Not recommended. The Dockerfile might be used to understand what dependencies are required to install but that is prone to errors. 
+    nextflow -C nextflow.whisper-gpu.config run transcribe-whisper-gpu.nf -profile docker,sge --in /path/to/audio.mp3
 
-### Command line parameters
+For SLURM:
 
-Firstly, the main script (transcribe.nf) already has default values for input parameters. All of these can be provided via the command line when executing the script using the nextflow executable. To use a parameter, ignore the 'params.' part and prepend two hyphens '--'. So 'params.in' becomes '--in'. The following parameter should always be provided (unless the default value is satisfactory):
+    nextflow -C nextflow.whisper-gpu.config run transcribe-whisper-gpu.nf -profile docker,slurm --in /path/to/audio.mp3
 
--   --in <filename> - The name and location of the audio recording in you local system that needs to be transcribed.
--   --out_dir <path> - The path to the directory where results will be stored. By default a relative directory "results/".
--   `--do_speaker_id true|false` - Include speaker diarization and identification. The result will include speaker names. Some Estonian celebrities and radio personalities will be identified by their name, others will be give ID-s. By default `true`.
--   `--do_punctuation true|false` - Whether to attempt punctuation recovery and add punctuation to the transcribed text. By default `true`.
--   `--do_language_id true|false` - Whether to apply a language ID model to discard speech segements that are not in Estonian. By default `true`.
+By default, Whisper results are written to `results/`.
 
-### Configuration file
+The Whisper pipeline writes speaker-prefixed transcript lines to `result.txt`.
 
-Additional configuration is currently provided via the nextflow.config file. The following parameters should be changed if you need advanced execution optimizations:
+## Parameters
 
--   nthreads - By default the script will use 2 system threads for more CPU-intensive parts of the transcription pipeline. Should be changed in case you are executing the script in parallel multiple times or want to use a different nubmer of threads per execution.
+Common parameters:
 
-Nextflow offers great support for cluster and cloud environments and Kubernetes. Please consult Nextflow documentation in order to configure these.
+- `--in <filename>`: audio or video file to transcribe.
+- `--out_dir <path>`: output directory.
+- `--do_speaker_id true|false`: include speaker identification.
+- `--do_language_id true|false`: filter non-Estonian speech segments.
 
-### Command line options
+CPU-only parameter:
 
-Nextflow allows additional command line options:
+- `--do_punctuation true|false`: run punctuation restoration.
 
--   with-report - Generates a human-readable HTML execution report by default into the current folder. Optional, useful to dig into resource consumption details.
--   with-trace - Generates a machine-readable CSV execution report of all the steps in the script. Places it into the current folder by default. Useful to gather general execution statistics.
--   with-dag "filename.png"- Generates a visual directed execution graph. Shows dependecies between script processes. Not very useful.
--   with-weblog "your-api-endpoint" - Sends real-time statistics to the provided API endpoint. This is used by our https://github.com/taltechnlp/est-asr-backend backend server to gather real-time progress information and estimate queue length.
+Whisper-only parameter:
+
+- `--in_file_list <filename>`: file containing input paths, one per line.
+
+## Configuration
+
+CPU/Kaldi configuration lives in `nextflow.config`.
+
+Whisper/CUDA configuration lives in `nextflow.whisper-gpu.config`.
+
+The Dockerfiles are separate:
+
+- `Dockerfile`: CPU/Kaldi image recipe.
+- `Dockerfile.whisper-gpu`: Whisper/CUDA image recipe.
+
+## Nextflow Options
+
+Useful standard Nextflow options:
+
+- `-with-report`: write an HTML execution report.
+- `-with-trace`: write a machine-readable execution trace.
+- `-with-dag <filename.png>`: write a workflow graph.

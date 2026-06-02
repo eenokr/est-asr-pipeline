@@ -6,7 +6,11 @@ import kaldiio
 import os.path
 import torch
 import torchaudio
-from speechbrain.pretrained import EncoderClassifier
+
+try:
+  from speechbrain.inference.speaker import EncoderClassifier
+except ImportError:
+  from speechbrain.pretrained import EncoderClassifier
 
 
 

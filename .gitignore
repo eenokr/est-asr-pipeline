@@ -15,7 +15,6 @@ dag.dot*
 flowchart.png*
 trace.txt*
 report.html*
-bin/spkid_system
 nextflow
 demo.opus
 auto_transcribe

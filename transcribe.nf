@@ -185,7 +185,7 @@ process speaker_id {
               trials lda_plda_scores
           
 	        cat lda_plda_scores | sort -k2,2 -k3,3nr | awk \'{print $3, $1, $2}\' | uniq -f2 | awk \'{if ($1 > !{params.sid_similarity_threshold}) {print $3, $2}}\' | \
-	        perl -npe \'s/^\\S+-(S\\d+)/\\1/; s/_/ /g;\' | python -c \'import json, sys; spks={s.split()[0]:{"name" : " ".join(s.split()[1:])} for s in sys.stdin}; json.dump(spks, sys.stdout);\' > sid-result.json
+	        perl -npe \'s/^\\S+-(S\\d+)/\\1/; s/_/ /g;\' | python3 -c \'import json, sys; spks={s.split()[0]:{"name" : " ".join(s.split()[1:])} for s in sys.stdin}; json.dump(spks, sys.stdout);\' > sid-result.json
           '''
         else
           '''
