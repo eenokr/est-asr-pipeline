@@ -32,6 +32,64 @@ On machines with limited RAM, run serially with one CPU and a Docker memory cap:
 
     nextflow run transcribe.nf -profile lowmem --in /path/to/audio.mp3
 
+### CPU and memory configuration
+
+The CPU/Kaldi workflow uses two shared parameters for the heavier steps:
+
+- `--nthreads <N>`: number of CPU threads requested by speaker ID and decoding.
+- `--process_memory <SIZE>`: memory requested by diarization, speaker ID, decoding, and RNNLM rescoring.
+
+For example, to request four CPU threads and 8 GB for the main processing steps:
+
+    nextflow run transcribe.nf --in /path/to/audio.mp3 --nthreads 4 --process_memory 8GB
+
+Some lightweight steps have fixed resource settings in `transcribe.nf`, for example `to_wav` uses `500MB` and 2 CPUs, `language_id` uses `4GB`, `mfcc` uses `1GB`, `lattice2ctm` uses `4GB` and 2 CPUs, and `punctuation` uses `4GB`. The `--process_memory` parameter does not override those fixed per-process settings.
+
+The bundled `lowmem` profile is useful on small machines:
+
+    nextflow run transcribe.nf -profile lowmem --in /path/to/audio.mp3
+
+It sets the workflow to run one task at a time, uses one thread for threaded Kaldi steps, lowers `process_memory` to `3GB`, and enables Docker with a hard container limit:
+
+    process.maxForks = 1
+    executor.queueSize = 1
+    params.nthreads = 1
+    params.process_memory = "3GB"
+    docker.runOptions = "--memory=5g --memory-swap=5g --cpus=1"
+
+Nextflow `cpus` and `memory` directives are resource requests used for scheduling. With the local executor, they are not always hard operating-system limits. When running through Docker, `docker.runOptions` is the part that enforces actual container-level CPU and memory caps.
+
+For custom limits, create a small config file, for example `resources.config`:
+
+    params {
+        nthreads = 4
+        process_memory = '8GB'
+    }
+
+    process {
+        maxForks = 1
+
+        withName: 'one_pass_decoding' {
+            cpus = 4
+            memory = '8GB'
+        }
+
+        withName: 'speaker_id' {
+            cpus = 4
+            memory = '8GB'
+        }
+
+        withName: 'punctuation' {
+            memory = '6GB'
+        }
+    }
+
+    docker.runOptions = '--memory=10g --memory-swap=10g --cpus=4'
+
+Run it with:
+
+    nextflow run transcribe.nf -c resources.config --in /path/to/audio.mp3
+
 By default, results are written to `results/<audio-basename>/`:
 
     result.ctm  result.json  result.srt  result.trs  result.with-compounds.ctm  result.txt
