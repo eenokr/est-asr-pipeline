@@ -1,22 +1,17 @@
-build
-kaldi-data
-language_model
-src-audio
-steps
-utils
-sid
-./Makefile.options
-rnnlm
-work
-.nextflow*
-results
-.vscode
-dag.dot*
-flowchart.png*
-trace.txt*
-report.html*
-nextflow
-demo.opus
-auto_transcribe
-__pycache__/
-*.py[cod]
+# Suured mudelid ja andmed
+models/
+kaldi-data/
+build/
+punctuator-data/
+bin/
+
+# Nextflow tööfailid
+work/
+.nextflow/
+.nextflow.log*
+
+# Tulemused
+results*/
+
+# Docker
+*.tar

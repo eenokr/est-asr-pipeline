@@ -1,0 +1,4 @@
+FROM alumae/est-asr-pipeline:0.1.4
+
+COPY nextflow.config /opt/est-asr-pipeline/nextflow.config
+COPY transcribe.nf /opt/est-asr-pipeline/transcribe.nf

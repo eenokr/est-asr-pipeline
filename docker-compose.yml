@@ -1,0 +1,10 @@
+services:
+  asr:
+    image: alumae/est-asr-pipeline:0.1.4
+    volumes:
+      - /opt/est-asr-pipeline:/opt/est-asr-pipeline
+      - /srv/smb/jagatud:/input
+      - /srv/smb/jagatud/tulemused:/output
+    working_dir: /opt/est-asr-pipeline
+    environment:
+      - NXF_HOME=/opt/est-asr-pipeline/.nextflow
