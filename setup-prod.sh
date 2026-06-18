@@ -11,28 +11,20 @@ echo "Installiin Java 21..."
 if [ "$OS" = "Darwin" ]; then
   brew install openjdk@21
   export PATH="$(brew --prefix)/opt/openjdk@21/bin:$PATH"
-  sudo ln -sfn $(brew --prefix)/opt/openjdk@21/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
 elif [ -f /etc/debian_version ]; then
   apt-get update -qq
   apt-get install -y openjdk-21-jre-headless curl ca-certificates
-  update-alternatives --set java /usr/lib/jvm/java-21-openjdk-amd64/bin/java 2>/dev/null || true
 fi
 java -version
 
 # 2. Docker
-if ! command -v docker &>/dev/null; then
-  echo "Installiin Docker..."
-  curl -fsSL https://get.docker.com | bash
-  systemctl enable docker
-  systemctl start docker
-  # Lisa kasutaja docker gruppi
-  SUDO_USER=${SUDO_USER:-$USER}
-  if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
-    usermod -aG docker "$SUDO_USER"
-    echo "NB: Logi välja ja sisse et Docker ilma sudo töötaks"
-  fi
-else
-  echo "Docker on juba installitud"
+echo "Installiin Docker..."
+curl -fsSL https://get.docker.com | bash
+systemctl enable docker 2>/dev/null || true
+systemctl start docker 2>/dev/null || true
+REAL_USER=${SUDO_USER:-$USER}
+if [ "$REAL_USER" != "root" ]; then
+  usermod -aG docker "$REAL_USER" 2>/dev/null || true
 fi
 docker --version
 
@@ -45,18 +37,18 @@ nextflow -version
 # 4. Docker image
 echo "Tõmban Docker image (~8GB, võtab aega)..."
 if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
-  echo "ARM tuvastatud - kasutan emulatsioonirežiimi"
   docker pull --platform linux/amd64 eenokr/est-asr:latest
 else
   docker pull eenokr/est-asr:latest
 fi
 
-# 5. Pipeline failid
+# 5. Pipeline failid (sh kõik vajalikud kaustad)
 echo "Kopeerin pipeline failid..."
 mkdir -p /opt/est-asr-pipeline
-docker create --name tmp_setup --platform linux/amd64 eenokr/est-asr:latest
+docker create --name tmp_setup eenokr/est-asr:latest
 docker cp tmp_setup:/opt/est-asr-pipeline/transcribe.nf /opt/est-asr-pipeline/
 docker cp tmp_setup:/opt/est-asr-pipeline/nextflow.config /opt/est-asr-pipeline/
+docker cp tmp_setup:/opt/est-asr-pipeline/bin /opt/est-asr-pipeline/
 docker rm tmp_setup
 
 # 6. Transkribeerimise skript
