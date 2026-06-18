@@ -2,24 +2,21 @@
 set -e
 echo "=== Est-ASR Pipeline setup ==="
 
-# Tuvasta OS
 OS=$(uname -s)
 ARCH=$(uname -m)
 echo "Süsteem: $OS / $ARCH"
 
 # 1. Java
-if ! java -version 2>/dev/null; then
-  echo "Installiin Java..."
-  if [ "$OS" = "Darwin" ]; then
-    brew install openjdk@17
-    sudo ln -sfn $(brew --prefix)/opt/openjdk@17/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-17.jdk
-  elif [ -f /etc/debian_version ]; then
-    sudo apt-get install -y default-jre-headless
-  else
-    echo "Palun installi Java käsitsi: https://adoptium.net"
-    exit 1
-  fi
+echo "Installiin Java..."
+if [ "$OS" = "Darwin" ]; then
+  brew install openjdk@17
+  sudo ln -sfn $(brew --prefix)/opt/openjdk@17/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-17.jdk
+  export PATH="$(brew --prefix)/opt/openjdk@17/bin:$PATH"
+elif [ -f /etc/debian_version ]; then
+  sudo apt-get update -qq
+  sudo apt-get install -y default-jre-headless
 fi
+java -version
 
 # 2. Nextflow
 echo "Installiin Nextflow..."
@@ -45,8 +42,6 @@ sudo docker cp tmp_setup:/opt/est-asr-pipeline/nextflow.config /opt/est-asr-pipe
 docker rm tmp_setup
 
 # 5. Transkribeerimise skript
-echo "Loon transkribeeri käsu..."
-ARCH=$(uname -m)
 PLATFORM_OPT=""
 if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
   PLATFORM_OPT="--platform linux/amd64"
@@ -65,7 +60,7 @@ TULEMUS="\${2:-/opt/tulemused/\$NIMI}"
 mkdir -p "\$TULEMUS"
 echo "Transkribeerin: \$FAIL"
 cd /opt/est-asr-pipeline
-NXF_DOCKER_LEGACY=true nextflow run transcribe.nf -profile docker $PLATFORM_OPT \
+nextflow run transcribe.nf -profile docker $PLATFORM_OPT \
   --in "\$FAIL" \
   --out_dir "\$TULEMUS" \
   --nthreads 4 \
